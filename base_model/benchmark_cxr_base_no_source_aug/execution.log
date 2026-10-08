@@ -1,0 +1,22 @@
+base start seed=42 device=cuda:0 source_pairs=566 target=138
+source epoch=1 train_loss=0.26442 val_dice=0.94498
+source epoch=2 train_loss=0.15148 val_dice=0.94951
+source epoch=3 train_loss=0.12422 val_dice=0.95010
+source epoch=4 train_loss=0.12823 val_dice=0.91783
+source epoch=5 train_loss=0.12216 val_dice=0.95387
+source epoch=6 train_loss=0.11412 val_dice=0.95145
+source epoch=7 train_loss=0.11157 val_dice=0.95273
+source epoch=8 train_loss=0.11732 val_dice=0.95471
+source epoch=9 train_loss=0.10627 val_dice=0.95539
+source epoch=10 train_loss=0.10427 val_dice=0.95594
+source epoch=11 train_loss=0.10570 val_dice=0.95454
+source epoch=12 train_loss=0.12880 val_dice=0.95498
+source epoch=13 train_loss=0.10785 val_dice=0.95483
+source epoch=14 train_loss=0.10569 val_dice=0.95619
+source epoch=15 train_loss=0.10471 val_dice=0.95558
+source epoch=16 train_loss=0.11298 val_dice=0.95447
+source epoch=17 train_loss=0.10907 val_dice=0.95529
+source epoch=18 train_loss=0.10334 val_dice=0.95619
+source epoch=19 train_loss=0.10261 val_dice=0.95616
+evaluated method=Source-only count=138 dice=0.93957
+base completed

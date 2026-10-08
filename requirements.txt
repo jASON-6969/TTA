@@ -1,0 +1,6 @@
+# Core runtime, pinned to the locally validated Python 3.12 environment.
+# Install the desired CPU or CUDA torch wheel before this file (see README).
+torch==2.11.0
+numpy==1.26.4
+scipy==1.17.1
+Pillow==12.3.0

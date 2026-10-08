@@ -1,0 +1,37 @@
+{
+  "experiment": "benchmark_cxr_base",
+  "label": "source-only base model before TTA",
+  "method": "Source-only",
+  "dataset_direction": "SZ-CXR -> Montgomery",
+  "source_training": {
+    "best_val_dice": 0.9561914631772398,
+    "best_epoch": 14,
+    "epochs_run": 19
+  },
+  "target_metrics": {
+    "count": 138,
+    "Dice_mean": 0.9395699203597354,
+    "Dice_std": 0.05376031671507408,
+    "Dice_median": 0.9587577144201951,
+    "HD95_mean": 2.640420677556072,
+    "HD95_std": 6.804295497067344,
+    "HD95_median": 0.0,
+    "JI_mean": 0.8903455271498009,
+    "JI_std": 0.0854538557055343,
+    "JI_median": 0.9207828214624267,
+    "Sensitivity_mean": 0.8971354926334992,
+    "Sensitivity_std": 0.08428226416803516,
+    "Sensitivity_median": 0.9272044024541979,
+    "PPV_mean": 0.9919611406103539,
+    "PPV_std": 0.026477870481914596,
+    "PPV_median": 0.9968018541230846
+  },
+  "target_count": 138,
+  "checkpoint": "C:\\Users\\jason\\Documents\\cource\\y4sem1\\fyp\\output\\experiments\\benchmark_cxr_base_no_source_aug\\source_checkpoint.pth",
+  "checkpoint_sha256": "d08d23748329fdfaef5842c6257ee418b55d2ec8a083790c9c8b2eff3d67cfb2",
+  "limitations": [
+    "The paper does not publish all optimizer, epoch, batch, or TTA learning-rate defaults in the main text; local values are recorded separately.",
+    "TestFit and GraTa use the existing local adapters and are not claimed as line-by-line official-wrapper reproductions.",
+    "The local source set has fewer paired masks than the 662 images stated by the paper, so numerical equality with Table 9 is not expected."
+  ]
+}

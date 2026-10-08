@@ -1,0 +1,56 @@
+# Python environments, caches and build products
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local credentials and editor settings
+.env
+.env.*
+!.env.example
+kaggle.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary download archives
+/downloads/
+
+# New TTA, baseline and comparison artifacts
+/selected_methods/
+/composition_runs/
+/output/
+*.log
+
+# Model weights and downloaded archives
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.npy
+*.npz
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+
+# Include the complete bundled datasets and base model, including its weights/log
+!/data/**
+!/base_model/**
+
+# Local report exports and the large reference paper
+/benchmark_cxr_base_model.pptx
+/benchmark_cxr_reproduction_process.pdf
+/Paradigm/Benchmark for Test Time Adaptation.pdf

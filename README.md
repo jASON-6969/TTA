@@ -1,3 +1,17 @@
+git lfs install
+git clone https://github.com/<owner>/<repository>.git test_v2
+cd test_v2
+git lfs pull
+
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements.txt
+
+python launch_gui.py
+
+
+
 # CXR Test-Time Adaptation Reproduction (test_v2)
 
 This directory can be used as the root of an independent GitHub repository.
@@ -373,5 +387,5 @@ See [`Paradigm/README.md`](Paradigm/README.md). In brief:
 
 The method folders are small vendor source snapshots copied from the local
 `vendor/MedSeg-TTA` registry and retained for classification and attribution.
-#   T T A  
- 
+# TTA
+
