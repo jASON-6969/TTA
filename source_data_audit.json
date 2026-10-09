@@ -1,0 +1,65 @@
+{
+  "audit": "SZ-CXR source data completeness against the benchmark CXR protocol",
+  "paper_claim": {
+    "source_images": 662,
+    "source_masks": 662,
+    "target_images": 138,
+    "source_to_target": "SZ-CXR -> Montgomery"
+  },
+  "local_image_count": 662,
+  "candidates": [
+    {
+      "ref": "yoctoman/shcxr-lung-mask",
+      "role": "public Shenzhen lung-mask archive used locally",
+      "license": "CC BY-NC-SA 4.0",
+      "manifest_file_count": 1132,
+      "true_mask_path_count": 1132,
+      "unique_mask_id_count": 566,
+      "exact_image_mask_matches": 566,
+      "missing_from_mask_archive": 96,
+      "complete_662_mask_archive": false
+    },
+    {
+      "ref": "nhannguyenle/shenzhen-montgomery-cxrdataset",
+      "role": "Shenzhen/Montgomery mirror with a mask directory",
+      "license": "Unknown in Kaggle metadata",
+      "manifest_file_count": 1642,
+      "true_mask_path_count": 566,
+      "unique_mask_id_count": 566,
+      "exact_image_mask_matches": 566,
+      "missing_from_mask_archive": 96,
+      "complete_662_mask_archive": false
+    },
+    {
+      "ref": "heyoujue/lungsegmentation",
+      "role": "CXR image mirror candidate",
+      "license": "Not used; no mask directory found",
+      "manifest_file_count": 1504,
+      "true_mask_path_count": 0,
+      "unique_mask_id_count": 0,
+      "exact_image_mask_matches": 0,
+      "missing_from_mask_archive": 662,
+      "complete_662_mask_archive": false
+    },
+    {
+      "ref": "iamtapendu/chest-x-ray-lungs-segmentation",
+      "role": "generic chest X-ray segmentation candidate",
+      "license": "Not used; no exact CHNCXR mask paths found",
+      "manifest_file_count": 1409,
+      "true_mask_path_count": 0,
+      "unique_mask_id_count": 0,
+      "exact_image_mask_matches": 0,
+      "missing_from_mask_archive": 662,
+      "complete_662_mask_archive": false
+    }
+  ],
+  "complete_public_662_mask_archive_found": false,
+  "conclusion": "No audited public candidate contains masks for all 662 local CHNCXR images. The two Shenzhen mask archives expose 566 exact masks and omit the same 96 images; the benchmark paper's complete 662-mask source is not identifiable from the public repository, cited source link, or audited public manifests.",
+  "source_links": {
+    "paper_repo": "https://github.com/wenjing-gg/MedSeg-TTA",
+    "paper_assets": "https://github.com/wenjing-gg/MedSeg-TTA/blob/main/ASSETS.md",
+    "shenzhen_images": "https://huggingface.co/datasets/Famatsu123/montgomery-shenzhen-tuberculosis-cxr",
+    "mask_archive": "https://www.kaggle.com/datasets/yoctoman/shcxr-lung-mask",
+    "mask_archive_candidate": "https://www.kaggle.com/datasets/nhannguyenle/shenzhen-montgomery-cxrdataset"
+  }
+}
