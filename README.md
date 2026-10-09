@@ -1,16 +1,31 @@
+# CXR Test-Time Adaptation Reproduction (test_v2)
 
+## Quick Start
 
+### 1. Clone the repository
+
+```powershell
 git lfs install
-git clone https://github.com/jASON-6969/TTA.git test_v2
+git clone [https://github.com/jASON-6969/TTA.git](https://github.com/jASON-6969/TTA.git) test_v2
 Set-Location .\test_v2
 git lfs pull
+```
 
+### 2. Set up the Python environment
+
+```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install torch==2.11.0 --index-url [https://download.pytorch.org/whl/cpu](https://download.pytorch.org/whl/cpu)
 python -m pip install -r requirements.txt
+```
 
+### 3. Launch the GUI
+
+```powershell
 python launch_gui.py
+```
+
 
 
 # CXR Test-Time Adaptation Reproduction (test_v2)
