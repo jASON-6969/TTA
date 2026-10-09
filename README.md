@@ -1,3 +1,18 @@
+###
+
+git lfs install
+git clone https://github.com/jASON-6969/TTA.git test_v2
+Set-Location .\test_v2
+git lfs pull
+
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements.txt
+
+python launch_gui.py
+###
+
 # CXR Test-Time Adaptation Reproduction (test_v2)
 
 This directory can be used as the root of an independent GitHub repository.
