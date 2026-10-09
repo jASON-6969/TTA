@@ -1,4 +1,4 @@
-###
+
 
 git lfs install
 git clone https://github.com/jASON-6969/TTA.git test_v2
@@ -11,7 +11,7 @@ python -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl
 python -m pip install -r requirements.txt
 
 python launch_gui.py
-###
+
 
 # CXR Test-Time Adaptation Reproduction (test_v2)
 
