@@ -6,7 +6,7 @@
 
 ```powershell
 git lfs install
-git clone [https://github.com/jASON-6969/TTA.git](https://github.com/jASON-6969/TTA.git) test_v2
+git clone https://github.com/jASON-6969/TTA.git test_v2
 Set-Location .\test_v2
 git lfs pull
 ```
