@@ -22,6 +22,7 @@ from .comparison import COMPARISON_FIELDS, QUALITY_METRICS, compare_predictions
 from .config import CompositionConfig, parse_methods
 from .data_selection import DATASETS, TargetCase, discover_targets
 from .engine import CompositionEngine
+from .experiment_record import write_hyperparameters
 from .model_bridge import ModelBundle, build_model_bundle, predict_source
 
 
@@ -254,6 +255,7 @@ def main() -> int:
     config.output = output_dir
     config.baseline_cache = (config.baseline_cache or output_dir.parent / "baselines").resolve()
     write_json(output_dir / "config.json", config.to_dict())
+    hyperparameters = write_hyperparameters(output_dir, config)
     provenance = adaptation_provenance(config.adaptation_steps)
     write_json(output_dir / "provenance.json", provenance)
     set_seed(config.seed)
@@ -348,6 +350,7 @@ def main() -> int:
     )
     _write_csv(output_dir / "metrics.csv", metrics, ("method", "image_id", *QUALITY_METRICS))
     summary = _completion_summary(output_dir, config, len(target_images), metrics, str(device), elapsed_seconds, aggregate)
+    summary["hyperparameters"] = hyperparameters
     summary["baseline"] = baseline_summary
     summary["comparison"] = comparison.summary
     write_json(output_dir / "summary.json", summary)

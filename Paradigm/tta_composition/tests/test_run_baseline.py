@@ -131,6 +131,26 @@ class RunnerBaselineChecks(unittest.TestCase):
         self.assertEqual(second["comparison"]["prediction_change_fraction_mean"], 1.0)
         self.assertFalse(any(event["event"] == "baseline_progress" for event in self.last_events))
 
+    def test_result_records_nondefault_hyperparameters_without_changing_baseline_metadata(self):
+        config = self.config("parameters", adaptation_steps=5, grata_noise_std=0.03,
+                             lrs={"GraTa": 2e-4})
+        summary = self.execute(config)
+        record = json.loads((config.output / "hyperparameters.json").read_text(encoding="utf-8"))
+        self.assertEqual(record, summary["hyperparameters"])
+        self.assertEqual(record["dataset"], "custom")
+        self.assertEqual(record["methods"], ["GraTa"])
+        self.assertEqual(record["adaptation_steps"], 5)
+        self.assertEqual(record["effective_adaptation_steps"], 5)
+        self.assertEqual(record["lrs"]["GraTa"], 2e-4)
+        self.assertEqual(record["grata_noise_std"], 0.03)
+        text = (config.output / "hyperparameters.txt").read_text(encoding="utf-8")
+        self.assertIn("GraTa（啟用）", text)
+        self.assertIn("noise_std=0.03", text)
+        self.assertIn("VPTTA（未啟用）", text)
+        baseline = json.loads((config.output / "baseline_summary.json").read_text(encoding="utf-8"))
+        self.assertEqual(baseline["methods"], [])
+        self.assertNotIn("hyperparameters", baseline)
+
     def test_completed_output_is_not_overwritten_by_another_run(self):
         config = self.config("preserved")
         self.execute(config)
@@ -157,6 +177,9 @@ class RunnerBaselineChecks(unittest.TestCase):
         self.assertEqual(self.source_calls, 3)
         self.assertEqual(second["comparison"]["prediction_change_fraction_mean"], 0.0)
         self.assertTrue(all(event["phase"] == "source_only" for event in self.last_events if event["event"] == "progress"))
+        self.assertEqual(second["hyperparameters"]["methods"], [])
+        self.assertEqual(second["hyperparameters"]["adaptation_steps"], 3)
+        self.assertEqual(second["hyperparameters"]["effective_adaptation_steps"], 0)
 
     def test_current_labels_are_reevaluated_without_rebuilding_predictions(self):
         first = self.execute(self.config("first"))
@@ -192,6 +215,9 @@ class RunnerBaselineChecks(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "controlled adaptation failure"):
             self.execute(config)
         self.assertFalse((config.output / "summary.json").exists())
+        record = json.loads((config.output / "hyperparameters.json").read_text(encoding="utf-8"))
+        self.assertEqual(record["lrs"]["GraTa"], 1e-4)
+        self.assertTrue((config.output / "hyperparameters.txt").is_file())
         self.assertEqual(self.source_calls, 3)
         self.assertEqual(len(list((self.root / "baselines").glob("*/READY.json"))), 1)
         self.fail_adaptation = False

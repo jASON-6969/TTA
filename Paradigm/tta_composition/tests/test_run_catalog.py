@@ -55,3 +55,26 @@ class RunCatalogTests(unittest.TestCase):
         catalog = build_catalog(self.root / "v2", self.source_runs)
         self.assertEqual({entry["run"] for entry in catalog["runs"]}, {"run", "method_run"})
         self.assertEqual(catalog["counts"]["unversioned_run"], 2)
+
+    def test_catalog_includes_dataset_runs_beside_historical_flat_runs(self):
+        runs = self.root / "v2"
+        for dataset in ("montgomery", "sz_cxr", "jsrt", "custom"):
+            directory = runs / dataset / "seed_42_grata_timestamp"
+            write_json(directory / "config.json", {"dataset": dataset, "methods": ["GraTa"]})
+            write_json(directory / "summary.json", {"event": "completed", "dataset": dataset})
+        catalog = build_catalog(runs, self.source_runs)
+        entries = {entry["dataset"]: entry for entry in catalog["runs"] if entry["dataset"]}
+        self.assertEqual(set(entries), {"montgomery", "sz_cxr", "jsrt", "custom"})
+        for dataset, entry in entries.items():
+            self.assertEqual(Path(entry["path"]), runs / dataset / "seed_42_grata_timestamp")
+        self.assertEqual(len(catalog["runs"]), 5)
+
+    def test_catalog_excludes_baseline_caches_in_flat_and_dataset_layouts(self):
+        runs = self.root / "v2"
+        for parent in (runs, runs / "jsrt"):
+            cache = parent / "baselines" / "cache-key"
+            # A cache must remain excluded even if it contains a config file.
+            write_json(cache / "config.json", {"methods": []})
+            write_json(cache / "summary.json", {"event": "baseline_evaluated"})
+        catalog = build_catalog(runs, self.source_runs)
+        self.assertEqual([entry["path"] for entry in catalog["runs"]], [str(self.run)])

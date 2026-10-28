@@ -1,44 +1,18 @@
-# Method Paradigm Classification
+# GUI TTA framework
 
-This directory is organized according to the paradigm taxonomy used by the
-local `vendor/MedSeg-TTA` registry. The copied method folders are source
-snapshots for reference and attribution; they are not all executed by the
-small CXR reproduction runner.
+This directory contains the TTA framework used by the desktop GUI. The legacy
+method snapshot folders that the GUI did not load have been removed.
 
-| Paradigm | Methods |
+| Directory | Purpose |
 | --- | --- |
-| Input-level Translation | AIF-SFDA, DL-TTA, RSA, SFDA-FSM, STDR |
-| Feature-level Alignment | DANN, GraTa, TestFit, UDA-MIMA |
-| Output-level Regularization | DeTTA, DG-TTA, SaTTCA, SmaRT, TENT, UPL-SFDA |
-| Prior Estimation | AdaMI, ExploringTTA, PASS, ProSFDA, VPTTA |
-| Baseline | Source-only |
+| `tta_composition/` | GUI, runner, five composable TTA methods and tests |
+| `Baseline/` | Source-only documentation; no test-time adaptation |
 
-`Source-only` is documented in `Baseline/README.md` because it performs no
-test-time adaptation. The taxonomy describes the primary adaptation locus. A
-method can use an auxiliary loss from another family without changing its
-primary folder.
-
-## Local CXR reproduction status
-
-- Executed target-only methods: `TENT`, `TestFit`, and `GraTa`.
-- Executed baseline: `Source-only`.
-- Pilot-only method: `DANN`; this local pilot is source-assisted because it
-  consumes source images and masks, so it is excluded from the strict
-  source-free result table.
-- Audit-only method: `UDA-MIMA`; the available wrapper constructs a source
-  loader and is not included in the strict target-only result table.
-- The remaining folders are benchmark method snapshots and are not claimed as
-  executed by this CXR bundle.
-
-## Classification notes
-
-- `TENT` is grouped under Output-level Regularization, matching the benchmark
-  registry, even though its implementation updates BatchNorm affine parameters
-  using an entropy objective.
-- `DeTTA` is grouped under Output-level Regularization, matching the current
-  registry entry and package path.
-- `VPTTA` is grouped under Prior Estimation, matching the benchmark taxonomy;
-  its implementation also contains prompt and input-translation operations.
+`launch_gui.py` loads `tta_composition.gui`. Starting an experiment launches
+`Paradigm.tta_composition.run`, which calls `CompositionEngine` and the selected
+methods in `tta_composition/methods/`. Selecting no methods runs Source-only.
+The model, image loading and metrics are supplied by
+`code/feature_alignment_2d_pilot/` at the repository root.
 
 ## Composition runner
 
@@ -48,7 +22,7 @@ all 31 non-empty subsets of `VPTTA`, `DLTTA`, `TestFit`, `GraTa`, and `SmaRT`.
 The runner uses a frozen source reference, an isolated adaptable student, and a
 central proposal/commit scheduler. It records parameter ownership, learning
 rate arbitration, source-buffer checks, per-image updates, and post-adaptation
-metrics under `test_v2/composition_runs/` (relative to the repository root).
+metrics under `composition_runs/` (relative to the repository root).
 
 After following the root README to install dependencies and restore the
 bundled Git LFS data/checkpoint, run from the repository root:

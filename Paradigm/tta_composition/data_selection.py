@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DATASETS = ("montgomery", "sz_cxr", "custom")
+DATASETS = ("montgomery", "sz_cxr", "jsrt", "custom")
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif"})
 
 
@@ -75,6 +75,8 @@ def discover_targets(
             _index_images(dataset_root / "right_mask", required=False),
         ]
     elif dataset == "sz_cxr":
+        mask_indexes = [_index_images(dataset_root / "masks", required=False)]
+    elif dataset == "jsrt":
         mask_indexes = [_index_images(dataset_root / "masks", required=False)]
     else:
         mask_indexes = []

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit import adaptation_provenance, sha256, write_json
+from .data_selection import DATASETS
 
 
 def classify_run(directory: Path, source_runs: Path, current_sources: dict[str, str]) -> dict[str, Any]:
@@ -40,21 +41,30 @@ def classify_run(directory: Path, source_runs: Path, current_sources: dict[str, 
         "source_run": str(original) if copied else None,
         "recorded_output": summary.get("output", config.get("output")),
         "methods": summary.get("methods", config.get("methods", [])),
+        "dataset": summary.get("dataset", config.get("dataset")),
         "cases": summary.get("cases"),
         "adaptation_steps": config.get("adaptation_steps"),
         "metrics": summary.get("metrics", {}),
     }
 
 
+def _run_directories(runs: Path) -> list[Path]:
+    """Inspect known grouping folders while excluding shared baseline caches."""
+    directories: list[Path] = []
+    for directory in sorted(runs.iterdir()):
+        if not directory.is_dir() or directory.name == "baselines":
+            continue
+        if (directory / "config.json").is_file():
+            directories.append(directory)
+        elif directory.name in DATASETS or directory.name.startswith("verify_batch_"):
+            directories.extend(_run_directories(directory))
+    return directories
+
+
 def build_catalog(runs: Path, source_runs: Path) -> dict[str, Any]:
     current_sources = adaptation_provenance(1)["adaptation_sources"]
-    directories = list(runs.iterdir())
-    for directory in tuple(directories):
-        if directory.is_dir() and directory.name.startswith("verify_batch_"):
-            directories.extend(directory.iterdir())
     entries = [classify_run(directory, source_runs, current_sources)
-               for directory in sorted(directories)
-               if directory.is_dir() and (directory / "config.json").is_file()]
+               for directory in _run_directories(runs)]
     return {
         "schema_version": 1,
         "runs_directory": str(runs.resolve()),

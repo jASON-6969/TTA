@@ -51,6 +51,9 @@ test_v2/                        # repository root (its name can change)
         left_mask/              # 138 official masks
         right_mask/             # 138 official masks
         merged_mask/            # 138 pixelwise unions used for evaluation
+      jsrt/
+        images/                 # 247 JSRT target images
+        masks/                  # 247 matching lung-field masks
     splits/
       source_split_seed42.json  # reproducible split metadata and IDs
       source_train.txt
@@ -61,13 +64,13 @@ test_v2/                        # repository root (its name can change)
   selected_methods/             # generated legacy TTA results; ignored
   composition_runs/             # generated composition/cache results; ignored
   Paradigm/tta_composition/     # runnable five-method framework and tests
-  Paradigm/                     # additional classification/vendor snapshots
+  Paradigm/Baseline/             # Source-only documentation
   reports/tta_validation.md     # previously recorded local validation
   verify_tta_improvements.py    # five single methods plus full combination
   manifest.json                 # annotated historical test_v1 inventory
 ```
 
-The `Paradigm/` classification and local execution status are documented in
+The GUI TTA framework and its execution path are documented in
 `Paradigm/README.md`.
 
 ## Data and split
@@ -85,6 +88,15 @@ in its protocol audit.
 Montgomery contains 138 images and official left/right masks. `merged_mask/`
 is a convenience copy of the pixelwise union; the runner can regenerate it
 from `left_mask/` and `right_mask/` if it is absent.
+
+JSRT is an optional additional target-only CXR domain. It contains 247
+single-view images and matching lung-field masks from a JSRT mirror. The
+source page is the Japanese Society of Radiological Technology database; the
+local mirror is documented in `data/raw/jsrt/SOURCE.md`. The GUI exposes it
+as **JSRT**, and the runner uses the existing SZ-CXR source checkpoint without
+training on JSRT.
+JSRT masks are opened only after all target adaptation and prediction steps,
+for the same post-adaptation evaluation protocol used by Montgomery.
 
 ### Provenance and limitations
 
@@ -371,21 +383,21 @@ explicitly marked historical. Its hashes describe that old snapshot, not the
 current GitHub source tree. Current experiment code identity is saved by the
 runner in `provenance.json` and `audit.json`. The old PDF builder under `reports/`
 expects a legacy `output/experiments` layout and is outside the supported
-clone/GUI/composition workflow. Reference method folders retain upstream
-provenance; their presence does not make every vendor wrapper runnable or
-assign a new license to third-party code.
+clone/GUI/composition workflow. The legacy method snapshot folders under
+`Paradigm/` that the GUI did not load have been removed; their historical
+inventory entries remain in `manifest.json`.
 
-## Method classification
+## GUI methods
 
 See [`Paradigm/README.md`](Paradigm/README.md). In brief:
 
-- Feature-level Alignment: DANN, GraTa, TestFit, UDA-MIMA
-- Input-level Translation: AIF-SFDA, DL-TTA, RSA, SFDA-FSM, STDR
-- Output-level Regularization: DeTTA, DG-TTA, SaTTCA, SmaRT, TENT, UPL-SFDA
-- Prior Estimation: AdaMI, ExploringTTA, PASS, ProSFDA, VPTTA
+- TTA: VPTTA, DLTTA, TestFit, GraTa and SmaRT, implemented in
+  `Paradigm/tta_composition/methods/`.
 - Baseline: Source-only (documented in `Paradigm/Baseline/`)
 
-The method folders are small vendor source snapshots copied from the local
-`vendor/MedSeg-TTA` registry and retained for classification and attribution.
+The GUI supports any subset of these five methods; selecting none runs
+Source-only. Its runner uses the UNet, image loading and metrics from
+`code/feature_alignment_2d_pilot/`. These TTA modules are local composition
+variants; their behavior is described in the composition README.
 # TTA
 

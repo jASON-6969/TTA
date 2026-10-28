@@ -105,6 +105,14 @@ class DataSelectionChecks(unittest.TestCase):
         cases = discover_targets(self.root, "sz_cxr")
         self.assertEqual(len(cases[0].mask_paths), 1)
 
+    def test_jsrt_uses_single_lung_masks(self) -> None:
+        dataset = self.root / "data" / "raw" / "jsrt"
+        write_image(dataset / "images" / "JPCLN001.png")
+        write_image(dataset / "masks" / "JPCLN001.png")
+        cases = discover_targets(self.root, "jsrt")
+        self.assertEqual(len(cases), 1)
+        self.assertEqual(cases[0].mask_paths, (dataset / "masks" / "JPCLN001.png",))
+
     def test_builtin_image_override_uses_masks_from_selected_dataset(self) -> None:
         alternate = self.root / "another Montgomery"
         write_image(alternate / "images" / "case.png")
@@ -148,6 +156,21 @@ class SummaryChecks(unittest.TestCase):
         self.assertNotIn("Dice 0", text)
         self.assertNotIn("0.8125", text)
         self.assertTrue(any(word in text for word in ("mask", "標籤", "評估", "遮罩")))
+
+    def test_completion_shows_recorded_parameters_for_active_methods(self) -> None:
+        from Paradigm.tta_composition.experiment_record import hyperparameter_record
+
+        config = CompositionConfig(dataset="jsrt", methods=("GraTa",), adaptation_steps=5,
+                                   lrs={"GraTa": 2e-4})
+        summary = self.summary()
+        summary["dataset"] = config.dataset
+        summary["hyperparameters"] = hyperparameter_record(config)
+        text = format_result(summary)
+        self.assertIn("資料集：jsrt", text)
+        self.assertIn("每張更新次數：5", text)
+        self.assertIn("GraTa=0.0002", text)
+        self.assertNotIn("VPTTA=", text)
+        self.assertLess(text.index("Dice"), text.index("設定學習率"))
 
 
 class RunnerChecks(unittest.TestCase):
@@ -248,7 +271,8 @@ class RunnerChecks(unittest.TestCase):
 
         arguments = ["run", "--dataset", "custom", "--image-dir", str(images),
                      "--mask-dir", str(masks), "--checkpoint", str(checkpoint),
-                     "--output", str(output), "--device", "cpu", "--methods", "GraTa"]
+                     "--output", str(output), "--device", "cpu", "--methods", "GraTa",
+                     "--adaptation-steps", "5"]
         captured = io.StringIO()
         bundle = SimpleNamespace(reference=FakeReference())
         with patch.object(sys, "argv", arguments), patch.object(run, "build_model_bundle", return_value=bundle), \
@@ -262,6 +286,9 @@ class RunnerChecks(unittest.TestCase):
         self.assertEqual(summary["evaluated_cases"], 1)
         self.assertEqual(summary["metrics"]["Dice_mean"], 1.0)
         self.assertEqual(summary["metrics"]["HD95_mean"], 0.0)
+        record = json.loads((output / "hyperparameters.json").read_text(encoding="utf-8"))
+        self.assertEqual(record, summary["hyperparameters"])
+        self.assertEqual(record["adaptation_steps"], 5)
         self.assertEqual(json.loads(captured.getvalue().splitlines()[-1]), summary)
         self.assertEqual(len(list((output / "predictions" / "GraTa").glob("*.png"))), 2)
         self.assertTrue((output / "metrics.csv").is_file())
@@ -482,6 +509,57 @@ class GUIFunctionChecks(unittest.TestCase):
         self.app._dataset_changed()
         return dataset
 
+    def _select_jsrt_fixture(self) -> Path:
+        dataset = self.directory / "data" / "raw" / "jsrt"
+        write_image(dataset / "images" / "JPCLN001.png")
+        write_image(dataset / "masks" / "JPCLN001.png", 0)
+        self.app.test_v1 = self.directory
+        self.app.dataset_var.set("JSRT")
+        self.app._dataset_changed()
+        return dataset
+
+    def test_jsrt_selection_sets_builtin_paths_and_mask_hint(self) -> None:
+        dataset = self._select_jsrt_fixture()
+        self.assertEqual(self.app._dataset_key(), "jsrt")
+        self.assertEqual(self.app.image_dir_var.get(), str(dataset / "images"))
+        self.assertEqual(self.app.mask_dir_var.get(), "")
+        self.assertEqual(self.app._discover_data()[0].mask_paths, (dataset / "masks" / "JPCLN001.png",))
+        self.assertIn("JSRT", self.app.data_info_var.get())
+        self.assertIn("可評估 1 張", self.app.data_info_var.get())
+
+    def test_jsrt_selection_reaches_runner_dataset_argument(self) -> None:
+        self._select_jsrt_fixture()
+        self.app.all_cases_var.set(True)
+        self.app._start()
+        arguments = self.app.process.arguments
+        self.assertEqual(arguments[arguments.index("--dataset") + 1], "jsrt")
+        self.assertEqual(arguments[arguments.index("--image-dir") + 1], self.app.image_dir_var.get())
+        self.assertNotIn("--mask-dir", arguments)
+
+    def test_dataset_results_have_separate_run_and_baseline_directories(self) -> None:
+        from Paradigm.tta_composition.gui import CompositionGUI
+
+        outputs = []
+        for label, key in (("Montgomery", "montgomery"), ("SZ-CXR", "sz_cxr"),
+                           ("JSRT", "jsrt"), ("自訂資料夾", "custom")):
+            with self.subTest(dataset=key):
+                app = CompositionGUI(self.root)
+                self.addCleanup(lambda app=app: self.root.after_cancel(app._poll_id))
+                app.checkpoint_var.set(str(self.checkpoint))
+                app.output_var.set(str(self.directory / "results"))
+                app.dataset_var.set(label)
+                app.image_dir_var.set(str(self.images))
+                app._start()
+                output = app.current_output
+                self.assertIsNotNone(output)
+                self.assertEqual(output.parent, self.directory / "results" / key)
+                self.assertTrue(output.name.startswith("seed_42_source_only_"))
+                payload = app.process.config_payload
+                self.assertEqual(payload["dataset"], key)
+                self.assertEqual(Path(payload["baseline_cache"]), output.parent / "baselines")
+                outputs.append(output)
+        self.assertEqual(len(set(outputs)), 4)
+
     def test_sz_cxr_image_browser_uses_selected_sibling_masks(self) -> None:
         original = self._select_sz_cxr_fixture()
         alternate = self.directory / "alternate SZ-CXR"
@@ -653,7 +731,9 @@ class GUIFunctionChecks(unittest.TestCase):
         config_path = Path(runner.arguments[runner.arguments.index("--config") + 1])
         self.assertEqual(config_path, runner.output_dir / "gui_config.json")
         self.assertEqual(Path(runner.arguments[runner.arguments.index("--baseline-cache") + 1]),
-                         self.directory / "results" / "baselines")
+                         self.directory / "results" / "custom" / "baselines")
+        self.assertIn("每張更新次數：5", self.app.log.get("1.0", "end"))
+        self.assertIn("learning_rate=0.005", self.app.log.get("1.0", "end"))
         config_path.parent.mkdir(parents=True)
         config_path.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         from Paradigm.tta_composition.run import _config_from_args, _parse_args

@@ -14,6 +14,7 @@ from tkinter import filedialog, messagebox, ttk
 from .config import CompositionConfig
 from .contracts import METHODS
 from .data_selection import discover_targets
+from .experiment_record import format_hyperparameters, hyperparameter_record
 from .gui_hyperparameters import default_hyperparameters, format_hyperparameter_hint, parse_hyperparameters, show_hyperparameter_dialog
 from .gui_process import RunProcess
 from .result_summary import format_result
@@ -85,14 +86,14 @@ class CompositionGUI:
         ttk.Button(method_row, text="清除", command=self._clear_methods).pack(side="right")
 
         self._path_row(settings, 1, "Checkpoint", self.checkpoint_var, self._browse_checkpoint)
-        self._path_row(settings, 2, "輸出目錄", self.output_var, self._browse_output)
+        self._path_row(settings, 2, "輸出根目錄（按資料集分組）", self.output_var, self._browse_output)
 
         data_row = ttk.Frame(settings)
         data_row.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(12, 4))
         ttk.Label(data_row, text="目標資料").pack(side="left", padx=(0, 14))
         dataset_box = ttk.Combobox(
             data_row, textvariable=self.dataset_var,
-            values=("Montgomery", "SZ-CXR", "自訂資料夾"), state="readonly", width=18,
+            values=("Montgomery", "SZ-CXR", "JSRT", "自訂資料夾"), state="readonly", width=18,
         )
         dataset_box.pack(side="left")
         dataset_box.bind("<<ComboboxSelected>>", self._dataset_changed)
@@ -185,7 +186,7 @@ class CompositionGUI:
             self.output_var.set(selected)
 
     def _dataset_key(self) -> str:
-        return {"Montgomery": "montgomery", "SZ-CXR": "sz_cxr", "自訂資料夾": "custom"}[self.dataset_var.get()]
+        return {"Montgomery": "montgomery", "SZ-CXR": "sz_cxr", "JSRT": "jsrt", "自訂資料夾": "custom"}[self.dataset_var.get()]
 
     def _dataset_changed(self, _event=None) -> None:
         key = self._dataset_key()
@@ -213,6 +214,8 @@ class CompositionGUI:
                     hint = "Montgomery 自動使用影像資料夾旁的 left_mask／right_mask。"
                 elif self._dataset_key() == "sz_cxr":
                     hint = "SZ-CXR 自動使用影像資料夾旁的 masks；無標籤時僅儲存預測。"
+                elif self._dataset_key() == "jsrt":
+                    hint = "JSRT 自動使用影像資料夾旁的 masks；標籤只在適配完成後評估。"
             self.data_info_var.set(f"影像 {len(records)} 張；可評估 {paired} 張。" + hint)
         except (OSError, ValueError) as error:
             self.data_info_var.set(f"資料尚未就緒：{error}")
@@ -307,7 +310,7 @@ class CompositionGUI:
             return
         selected = [name for name in METHODS if self.method_vars[name].get()]
         label = "source_only" if not selected else "_".join(name.lower() for name in selected)
-        output_root = Path(self.output_var.get()).expanduser().resolve()
+        output_root = Path(self.output_var.get()).expanduser().resolve() / self._dataset_key()
         run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         output = output_root / f"seed_{seed}_{label}_{run_stamp}"
         try:
@@ -316,6 +319,7 @@ class CompositionGUI:
                 seed=seed, max_cases=max_cases, device=self.device_var.get(), dataset=self._dataset_key(),
                 image_dir=Path(self.image_dir_var.get().strip()).expanduser().resolve(),
                 mask_dir=Path(self.mask_dir_var.get().strip()).expanduser().resolve() if self.mask_dir_var.get().strip() else None,
+                baseline_cache=output_root / "baselines",
             )
         except ValueError as error:
             messagebox.showerror("設定無效", str(error))
@@ -338,6 +342,7 @@ class CompositionGUI:
         self.summary_var.set("準備全資料集 Source-only baseline；完成後執行本次實驗。")
         self._append_log(f"\n開始實驗｜{self.dataset_var.get()}｜方法：{', '.join(selected) or 'Source-only'}\n")
         self._append_log(f"影像：{self.image_dir_var.get()}\n結果目錄：{output}\n")
+        self._append_log(format_hyperparameters(hyperparameter_record(config)) + "\n")
         total = len(records) if max_cases is None else min(len(records), max_cases)
         self.status_var.set(f"檢查 Source-only baseline…（全資料集 {len(records)} 張；本次 {total} 張）")
         self._set_running(True)

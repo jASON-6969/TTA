@@ -5,6 +5,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .experiment_record import format_hyperparameters
+
 
 def _metric(metrics: dict[str, Any], name: str, digits: int = 4) -> str:
     mean = metrics.get(f"{name}_mean")
@@ -64,6 +66,8 @@ def format_result(summary: dict[str, Any]) -> str:
     lines = [
         f"實驗完成｜預測 {cases} 張｜評估 {evaluated} 張",
     ]
+    if summary.get("dataset") and not isinstance(summary.get("hyperparameters"), dict):
+        lines.append(f"資料集：{summary['dataset']}")
     if evaluated:
         metrics = summary["metrics"]
         lines.append(
@@ -78,5 +82,7 @@ def format_result(summary: dict[str, Any]) -> str:
     lines.extend(_comparison_lines(summary))
     if summary.get("elapsed_seconds") is not None:
         lines.append(f"總耗時：{float(summary['elapsed_seconds']):.2f} 秒")
+    if isinstance(summary.get("hyperparameters"), dict):
+        lines.append(format_hyperparameters(summary["hyperparameters"], compact=True))
     lines.append(f"結果目錄：{summary['output']}")
     return "\n".join(lines)

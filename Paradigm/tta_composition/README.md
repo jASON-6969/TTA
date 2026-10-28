@@ -44,14 +44,26 @@ On Windows, `start_gui.cmd` reopens it using the clone's `.venv` after setup.
 The GUI's background runner uses the same Python interpreter as the GUI.
 
 The GUI uses the same runner in a background process, streams per-image
-progress, and adds a timestamped run directory under the selected output
-folder to avoid overwriting earlier results.
+progress, and groups timestamped experiments by the selected dataset:
 
-The desktop interface supports Montgomery, SZ-CXR, and a custom target image
-folder. Use **檢查資料** to inspect image and label coverage before starting.
+```text
+<output-folder>/
+  <dataset>/
+    seed_<seed>_<methods>_<timestamp>/
+    baselines/<cache-key>/
+```
+
+Dataset folders are `montgomery`, `sz_cxr`, `jsrt`, and `custom`. Each experiment
+has its own directory; the GUI's output-folder field selects their common root.
+The CLI's default output layout remains `composition_runs/seed_<seed>_<methods>/`.
+
+The desktop interface supports Montgomery, SZ-CXR, JSRT, and a custom target
+image folder. Use **檢查資料** to inspect image and label coverage before
+starting.
 Choose a case limit or **全部影像**. Running, cancelled and failed experiments
 have distinct statuses. On success, both the result panel and the log show
-mean Dice, HD95 and IoU, the evaluated case count, and the output folder.
+the dataset, mean Dice, HD95 and IoU, the evaluated case count, the active
+methods' hyperparameters, and the output folder.
 The complete UTF-8 log is saved as `execution.log`; numeric results are saved
 in `summary.json` and per-case `metrics.csv`. Scores are calculated after the
 entire adaptation stream, never used as adaptation supervision.
@@ -71,8 +83,13 @@ memory/prompt sizes are positive integers, confidence is in `[0, 1]`, EMA decay
 is in `(0, 1]`, and the input size must be a positive multiple of 16.
 
 Each GUI run saves `gui_config.json` before starting the child process and the
-resolved `config.json` inside its result directory. CLI runs can use `--config`
-with a JSON file, for example:
+resolved `config.json` inside its result directory. Before inference, the runner
+also writes `hyperparameters.json` and a readable `hyperparameters.txt`, recording
+all configured settings, including unchecked methods, and the enabled methods.
+The completed `summary.json` includes a `hyperparameters` field. Source-only
+records zero effective adaptation updates while retaining the configured update
+count for later experiments. The GUI displays the selected methods' parameters.
+CLI runs can use `--config` with a JSON file, for example:
 
 ```json
 {
@@ -97,7 +114,7 @@ python -m Paradigm.tta_composition.run --config .\experiment.json --max-cases 8 
 The first experiment on new target images first performs frozen Source-only
 inference on **every image in the selected folder**, including unlabelled images,
 regardless of the TTA case limit. Completed predictions are recorded under
-`<output-folder>/baselines/<cache-key>/`. CLI runs default to a `baselines`
+`<output-folder>/<dataset>/baselines/<cache-key>/`. CLI runs default to a `baselines`
 directory beside their run output; `--baseline-cache` can select a shared cache.
 
 The cache key includes every image's content and path, the checkpoint hash,
@@ -146,6 +163,12 @@ and evaluates using the union of the matching `left_mask` and `right_mask`.
 `--dataset sz_cxr` reads `data/raw/sz_cxr/images` with optional matching
 `masks/<image>_mask.png`. Selecting SZ-CXR changes the target domain; it does
 not reproduce the standard SZ-CXR-to-Montgomery experiment.
+`--dataset jsrt` reads `data/raw/jsrt/images` and matching binary lung masks
+from `data/raw/jsrt/masks`. JSRT is an additional Japanese CXR target domain;
+the bundled SZ-CXR checkpoint is reused and JSRT is never used for training.
+The GUI exposes JSRT in the **目標資料** selector and fills these folders
+automatically. The local mirror and its mask conversion rule are recorded in
+`data/raw/jsrt/SOURCE.md`.
 
 For another binary 2D segmentation dataset, select **自訂資料夾** in the GUI,
 or use:
@@ -238,7 +261,8 @@ does not retroactively change their saved configuration. Generate the source
 index with `python -m Paradigm.tta_composition.run_catalog`; entries distinguish
 copies, unversioned results and results matching the current adaptation code.
 Historical runs without adaptation hashes cannot establish which code was used.
-The index preserves the original files.
+The index includes both historical flat/batch directories and dataset folders,
+excludes baseline caches, and preserves the original files.
 
 `verify_tta_improvements.py` runs all five single methods and the full
 composition, writes a batch `verification_summary.json`, and returns a nonzero
