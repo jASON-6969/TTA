@@ -125,19 +125,21 @@ class ConfigurationTests(unittest.TestCase):
             for value in (0, -1, 1.5, True):
                 with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                     CompositionConfig(**{field: value})
-        for field, value in (
+        for bounded_field, bounded_value in (
             ("image_size", 17), ("normalization", "unknown"), ("testfit_confidence", 1.1),
             ("smart_ema_decay", 0), ("smart_ema_decay", 1.1),
             ("seed", -1), ("seed", 4294967296), ("seed", True), ("seed", 1.5),
         ):
-            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
-                CompositionConfig(**{field: value})
+            with self.subTest(field=bounded_field, value=bounded_value), self.assertRaises(ValueError):
+                CompositionConfig(**{bounded_field: bounded_value})
         for confidence in (0.0, 1.0):
             CompositionConfig(testfit_confidence=confidence, smart_ema_decay=1.0, seed=0)
         CompositionConfig(seed=4294967295, image_size=16)
 
 
 class AdaptationSettingTests(unittest.TestCase):
+    original_threads: int
+
     @classmethod
     def setUpClass(cls):
         cls.original_threads = torch.get_num_threads()
@@ -241,6 +243,85 @@ class AdaptationSettingTests(unittest.TestCase):
             self.assertEqual(method.lr if name != "DLTTA" else method.base_lr, config.lrs[name])
         prediction, _, _ = engine.step(image, "after-reset")
         self.assertEqual(prediction.shape, (1, 16, 16))
+
+    def test_reset_method_testfit_restores_only_testfit_parameters(self):
+        engine = make_engine(configured(image_size=16))
+        image = torch.linspace(-1, 1, 256).reshape(1, 16, 16)
+        engine.step(image, "before-selective-reset")
+        testfit_names = engine.registry.names_for("TestFit")
+        grata_names = engine.registry.names_for("GraTa")
+        self.assertTrue(testfit_names)
+        self.assertTrue(grata_names)
+        with torch.no_grad():
+            for parameter in engine.registry.parameters.values():
+                parameter.add_(0.1)
+                parameter.grad = torch.ones_like(parameter)
+        original_parameters = {name: parameter.detach().clone() for name, parameter in engine.registry.parameters.items()}
+        original_ema = deepcopy(engine.bundle.ema.state_dict())
+        original_reference = deepcopy(engine.bundle.reference.state_dict())
+        original_buffers = {name: value.detach().clone() for name, value in engine.bundle.student.named_buffers()}
+        original_prompt_memory = [value.clone() for value in engine.vptta.memory]
+        original_dltta_memory = [value.clone() for value in engine.dltta.memory]
+        original_ownership = engine.parameter_ownership
+        original_step = engine.step_index
+        original_rng = torch.get_rng_state()
+        engine.reset("TestFit")
+        for name, parameter in engine.registry.parameters.items():
+            expected = engine._initial_student[name] if name in testfit_names else original_parameters[name]
+            self.assertTrue(torch.equal(parameter, expected), name)
+            if name in testfit_names:
+                self.assertIsNone(parameter.grad)
+            else:
+                self.assertTrue(torch.equal(parameter.grad, torch.ones_like(parameter)))
+        for model, snapshot in ((engine.bundle.ema, original_ema), (engine.bundle.reference, original_reference)):
+            for name, value in model.state_dict().items():
+                self.assertTrue(torch.equal(value, snapshot[name]), name)
+        for name, value in engine.bundle.student.named_buffers():
+            self.assertTrue(torch.equal(value, original_buffers[name]), name)
+        for memory, snapshot in ((engine.vptta.memory, original_prompt_memory), (engine.dltta.memory, original_dltta_memory)):
+            self.assertEqual(len(memory), len(snapshot))
+            self.assertTrue(all(torch.equal(left, right) for left, right in zip(memory, snapshot)))
+        self.assertEqual(engine.step_index, original_step)
+        self.assertEqual(engine.parameter_ownership, original_ownership)
+        self.assertTrue(torch.equal(torch.get_rng_state(), original_rng))
+        self.assertEqual(engine.testfit.confidence, engine.config.testfit_confidence)
+        prediction, record, _ = engine.step(image, "after-selective-reset")
+        self.assertEqual(prediction.shape, (1, 16, 16))
+        self.assertEqual(record.step, original_step + engine.config.adaptation_steps)
+
+    def test_each_method_can_reset_independently_and_keep_adapting(self):
+        image = torch.linspace(-1, 1, 256).reshape(1, 16, 16)
+        cases = [(METHODS, method) for method in METHODS] + [(("DLTTA",), "DLTTA")]
+        for methods, method in cases:
+            with self.subTest(methods=methods, method=method):
+                engine = make_engine(configured(methods=methods, image_size=16, adaptation_steps=1))
+                engine.step(image, "before-reset")
+                with torch.no_grad():
+                    for name in engine.registry.names_for(method):
+                        engine.registry.parameter(name).add_(0.1)
+                engine.reset_method(method)
+                if method == "VPTTA":
+                    self.assertEqual(len(engine.vptta.memory), 0)
+                    self.assertTrue(torch.equal(engine.vptta.prompt, torch.zeros_like(engine.vptta.prompt)))
+                if method == "DLTTA":
+                    self.assertEqual(len(engine.dltta.memory), 0)
+                    self.assertEqual(engine.dltta.parameter_names(), engine.registry.names_for(method))
+                if method == "SmaRT":
+                    assert engine._initial_ema is not None
+                    for name, value in engine.bundle.ema.state_dict().items():
+                        self.assertTrue(torch.equal(value, engine._initial_ema[name]), name)
+                prediction, record, _ = engine.step(image, "after-reset")
+                self.assertEqual(prediction.shape, (1, 16, 16))
+                self.assertEqual(record.step, 2)
+
+    def test_reset_inactive_or_unknown_method_is_rejected_without_mutation(self):
+        engine = make_engine(configured(methods=("GraTa",), image_size=16))
+        state = deepcopy(engine.bundle.student.state_dict())
+        for name in ("TestFit", "unknown"):
+            with self.subTest(method=name), self.assertRaises(ValueError):
+                engine.reset_method(name)
+        for name, value in engine.bundle.student.state_dict().items():
+            self.assertTrue(torch.equal(value, state[name]), name)
 
     def test_ema_decay_controls_teacher_update(self):
         for adaptation_steps in (1, 3, 5):

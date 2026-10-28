@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
+import os
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Mapping
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -63,6 +67,13 @@ def default_hyperparameters() -> dict[str, Any]:
     return _values_from_config(CompositionConfig())
 
 
+def hyperparameter_settings_path() -> Path:
+    """Return the per-user settings file used by the desktop GUI."""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    root = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+    return root / "TTAComposition" / "hyperparameters.json"
+
+
 def parse_hyperparameters(values: Mapping[str, Any]) -> dict[str, Any]:
     """Parse UI values and delegate parameter ranges to CompositionConfig."""
     merged = default_hyperparameters()
@@ -81,6 +92,40 @@ def parse_hyperparameters(values: Mapping[str, Any]) -> dict[str, Any]:
         else:
             parsed[field.name] = value
     return _values_from_config(CompositionConfig(**parsed))
+
+
+def load_saved_hyperparameters(path: Path | None = None) -> dict[str, Any]:
+    """Load and validate saved GUI settings, falling back to current defaults."""
+    defaults = default_hyperparameters()
+    settings_path = path or hyperparameter_settings_path()
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("saved settings must be an object")
+        return parse_hyperparameters(payload)
+    except (OSError, ValueError, TypeError):
+        return defaults
+
+
+def save_hyperparameters(values: Mapping[str, Any], path: Path | None = None) -> Path:
+    """Validate and persist GUI settings, returning the written path."""
+    normalized = parse_hyperparameters(values)
+    settings_path = path or hyperparameter_settings_path()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=settings_path.parent,
+            prefix=f".{settings_path.name}.", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            json.dump(normalized, stream, ensure_ascii=False, allow_nan=False, indent=2)
+            stream.write("\n")
+        os.replace(temporary_path, settings_path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return settings_path
 
 
 def format_hyperparameter_hint(values: Mapping[str, Any]) -> str:
@@ -102,7 +147,7 @@ class HyperparameterDialog(tk.Toplevel):
         self.variables: dict[str, tk.StringVar] = {}
         shell = ttk.Frame(self, padding=14)
         shell.pack(fill="both", expand=True)
-        ttk.Label(shell, text="設定會套用到下一次實驗；未勾選方法的設定會保留。").pack(anchor="w", pady=(0, 10))
+        ttk.Label(shell, text="按「套用」會儲存設定，下次啟動自動載入；未勾選方法的設定會保留。").pack(anchor="w", pady=(0, 10))
         self.notebook = ttk.Notebook(shell, width=500, height=250)
         self.notebook.pack(fill="both", expand=True)
         for tab in ("一般", *METHODS):
@@ -121,7 +166,8 @@ class HyperparameterDialog(tk.Toplevel):
                 widget.grid(row=row, column=1, sticky="ew", pady=7)
         controls = ttk.Frame(shell)
         controls.pack(fill="x", pady=(12, 0))
-        ttk.Button(controls, text="恢復預設", command=self._restore_defaults).pack(side="left")
+        ttk.Button(controls, text="恢復目前頁籤預設", command=self._restore_defaults).pack(side="left")
+        ttk.Button(controls, text="恢復全部預設", command=self._restore_all_defaults).pack(side="left", padx=(8, 0))
         ttk.Button(controls, text="套用", command=self._apply).pack(side="right", padx=(8, 0))
         ttk.Button(controls, text="取消", command=self._cancel).pack(side="right")
         self.protocol("WM_DELETE_WINDOW", self._cancel)
@@ -138,8 +184,15 @@ class HyperparameterDialog(tk.Toplevel):
         return values
 
     def _restore_defaults(self) -> None:
+        selected_tab = self.notebook.tab(self.notebook.select(), "text")
+        self._restore_fields(tuple(field for field in FIELDS if field.tab == selected_tab))
+
+    def _restore_all_defaults(self) -> None:
+        self._restore_fields(FIELDS)
+
+    def _restore_fields(self, fields: tuple[HyperparameterField, ...]) -> None:
         defaults = default_hyperparameters()
-        for field in FIELDS:
+        for field in fields:
             self.variables[field.name].set(str(_field_value(defaults, field)))
 
     def _apply(self) -> None:

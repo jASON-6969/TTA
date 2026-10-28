@@ -264,7 +264,11 @@ class CompositionEngine:
                 probabilities = student_probabilities
             return probabilities.argmax(dim=1).cpu()
 
-    def reset(self) -> None:
+    def reset(self, method: str | None = None) -> None:
+        """Reset the whole composition, or only the named active method."""
+        if method is not None:
+            self.reset_method(method)
+            return
         self.bundle.student.load_state_dict(self._initial_student)
         self.bundle.smart.load_state_dict(self._initial_smart)
         if self.bundle.ema is not None and self._initial_ema is not None:
@@ -275,6 +279,27 @@ class CompositionEngine:
         self._method_objects.update({"TestFit": self.testfit, "GraTa": self.grata, "SmaRT": self.smart})
         self.step_index = 0
         self._configure_ownership()
+
+    def reset_method(self, method: str) -> None:
+        """Reset one adapter while preserving every other adapter's state."""
+        if method not in self.methods:
+            raise ValueError(f"Method is not active: {method}")
+        names = self.registry.names_for(method)
+        initial_state = self._initial_student if method != "SmaRT" else self._initial_smart
+        with torch.no_grad():
+            for name in names:
+                parameter = self.registry.parameter(name)
+                if method == "VPTTA":
+                    parameter.zero_()
+                else:
+                    state_name = name.removeprefix("smart.") if method == "SmaRT" else name
+                    parameter.copy_(initial_state[state_name])
+                parameter.grad = None
+        self._method_objects[method].reset()
+        if method == "DLTTA":
+            self.dltta.bind_host(names)
+        if method == "SmaRT" and self.bundle.ema is not None and self._initial_ema is not None:
+            self.bundle.ema.load_state_dict(self._initial_ema)
 
     def audit_state(self) -> dict[str, object]:
         current_buffers = source_buffers_snapshot(self.bundle.reference)

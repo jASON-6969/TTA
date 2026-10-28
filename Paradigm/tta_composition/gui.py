@@ -15,7 +15,13 @@ from .config import CompositionConfig
 from .contracts import METHODS
 from .data_selection import discover_targets
 from .experiment_record import format_hyperparameters, hyperparameter_record
-from .gui_hyperparameters import default_hyperparameters, format_hyperparameter_hint, parse_hyperparameters, show_hyperparameter_dialog
+from .gui_hyperparameters import (
+    format_hyperparameter_hint,
+    load_saved_hyperparameters,
+    parse_hyperparameters,
+    save_hyperparameters,
+    show_hyperparameter_dialog,
+)
 from .gui_process import RunProcess
 from .result_summary import format_result
 
@@ -42,7 +48,7 @@ class CompositionGUI:
         self.max_cases_var = tk.StringVar(value="8")
         self.seed_var = tk.StringVar(value="42")
         self.device_var = tk.StringVar(value="auto")
-        self.hyperparameter_values = default_hyperparameters()
+        self.hyperparameter_values = load_saved_hyperparameters()
         self.hyperparameter_hint_var = tk.StringVar(value=format_hyperparameter_hint(self.hyperparameter_values))
         self.method_vars = {name: tk.BooleanVar(value=False) for name in METHODS}
         self.process = RunProcess(self.python, self.test_v1)
@@ -170,6 +176,14 @@ class CompositionGUI:
         if values is not None:
             self.hyperparameter_values = values
             self.hyperparameter_hint_var.set(format_hyperparameter_hint(values))
+            try:
+                save_hyperparameters(values)
+            except OSError as error:
+                self._append_log(f"無法保存超參數設定：{error}\n")
+                messagebox.showwarning(
+                    "超參數未儲存", f"設定已套用至本次 GUI，但無法儲存供下次啟動使用：\n{error}",
+                    parent=self.root,
+                )
 
     def _browse_checkpoint(self) -> None:
         selected = filedialog.askopenfilename(

@@ -71,8 +71,22 @@ entire adaptation stream, never used as adaptation supervision.
 ## Hyperparameters
 
 Use **超參數…** to edit the next experiment. The dialog has a general tab and
-one tab per method, with **套用**, **取消**, and **恢復預設**. Settings for an
-unchecked method are retained. The controls are disabled during an experiment.
+one tab per method, with **套用**, **取消**, **恢復目前頁籤預設**, and
+**恢復全部預設**. Resetting the TestFit tab changes only its learning rate,
+confidence threshold and feature weight. Changes take effect when applied;
+cancelling leaves the previous settings intact. Settings for an unchecked
+method are retained. The controls are disabled during an experiment.
+
+Applying settings also saves them to
+`%LOCALAPPDATA%\TTAComposition\hyperparameters.json`; the next GUI session
+loads them automatically. Missing or invalid files fall back to current
+defaults. A failed save preserves the previous file and displays a warning.
+
+For engine state, `engine.reset("TestFit")` (or
+`engine.reset_method("TestFit")`) restores only TestFit-owned student parameters.
+Other methods' parameters, VPTTA/DLTTA memories, SmaRT's EMA teacher and the
+global update counter are preserved. `engine.reset()` resets the complete
+composition. These engine calls are separate from resetting GUI hyperparameters.
 
 The five learning rates, input size/normalization, VPTTA prompt size/strength and
 memory capacity, DLTTA memory capacity, TestFit confidence/feature weight,

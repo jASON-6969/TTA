@@ -29,7 +29,13 @@ sys.path.insert(0, str(TEST_V1 / "code"))
 from Paradigm.tta_composition.config import CompositionConfig
 from Paradigm.tta_composition.data_selection import TargetCase, discover_targets
 from Paradigm.tta_composition.gui_process import ProcessEvent, RunProcess
-from Paradigm.tta_composition.gui_hyperparameters import HyperparameterDialog, default_hyperparameters, parse_hyperparameters
+from Paradigm.tta_composition.gui_hyperparameters import (
+    HyperparameterDialog,
+    default_hyperparameters,
+    load_saved_hyperparameters,
+    parse_hyperparameters,
+    save_hyperparameters,
+)
 from Paradigm.tta_composition.result_summary import format_result
 
 
@@ -37,6 +43,43 @@ def write_image(path: Path, color: int = 255) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("L", (16, 16), color=color).save(path)
     return path
+
+
+class HyperparameterStorageChecks(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory(prefix="tta saved settings ")
+        self.addCleanup(temporary.cleanup)
+        self.path = Path(temporary.name) / "appdata" / "TTAComposition" / "hyperparameters.json"
+
+    def test_settings_roundtrip_includes_inactive_method_values(self) -> None:
+        values = default_hyperparameters()
+        values.update(image_size=128, adaptation_steps=5, testfit_confidence=0.91, grata_noise_std=0.17)
+        values["lrs"]["TestFit"] = 0.002
+        save_hyperparameters(values, self.path)
+        self.assertEqual(load_saved_hyperparameters(self.path), values)
+
+    def test_missing_invalid_and_partial_settings(self) -> None:
+        self.assertEqual(load_saved_hyperparameters(self.path), default_hyperparameters())
+        self.path.parent.mkdir(parents=True)
+        for content in ("{invalid", "null", "[]", '{"lrs": null}',
+                        '{"testfit_confidence": 1.2}', '{"lrs": {"TestFit": "nan"}}'):
+            with self.subTest(content=content):
+                self.path.write_text(content, encoding="utf-8")
+                self.assertEqual(load_saved_hyperparameters(self.path), default_hyperparameters())
+        self.path.write_text('{"testfit_confidence": 0.91}', encoding="utf-8")
+        expected = default_hyperparameters()
+        expected["testfit_confidence"] = 0.91
+        self.assertEqual(load_saved_hyperparameters(self.path), expected)
+
+    def test_failed_save_preserves_previous_settings(self) -> None:
+        original = default_hyperparameters()
+        save_hyperparameters(original, self.path)
+        changed = {**original, "testfit_confidence": 0.91}
+        with patch("Paradigm.tta_composition.gui_hyperparameters.os.replace", side_effect=PermissionError("locked")):
+            with self.assertRaises(PermissionError):
+                save_hyperparameters(changed, self.path)
+        self.assertEqual(load_saved_hyperparameters(self.path), original)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
 
 
 class DataSelectionChecks(unittest.TestCase):
@@ -191,9 +234,9 @@ class RunnerChecks(unittest.TestCase):
         import numpy as np
         from Paradigm.tta_composition import run
 
-        left = np.zeros((16, 16), dtype=np.uint8)
+        left: np.ndarray = np.zeros((16, 16), dtype=np.uint8)
         left[1:4, 1:4] = 1
-        right = np.zeros((16, 16), dtype=np.uint8)
+        right: np.ndarray = np.zeros((16, 16), dtype=np.uint8)
         right[8:12, 8:12] = 1
         paths = (self.directory / "left.png", self.directory / "right.png")
         Image.fromarray(left).save(paths[0])
@@ -476,6 +519,13 @@ class GUIFunctionChecks(unittest.TestCase):
         self.process_patch = patch.object(gui, "RunProcess", FakeRunProcess)
         self.process_patch.start()
         self.addCleanup(self.process_patch.stop)
+        self.settings_path = self.directory / "appdata" / "TTAComposition" / "hyperparameters.json"
+        self.settings_patch = patch(
+            "Paradigm.tta_composition.gui_hyperparameters.hyperparameter_settings_path",
+            return_value=self.settings_path,
+        )
+        self.settings_patch.start()
+        self.addCleanup(self.settings_patch.stop)
         try:
             self.root = tk.Tk()
         except tk.TclError as error:
@@ -544,7 +594,7 @@ class GUIFunctionChecks(unittest.TestCase):
                            ("JSRT", "jsrt"), ("自訂資料夾", "custom")):
             with self.subTest(dataset=key):
                 app = CompositionGUI(self.root)
-                self.addCleanup(lambda app=app: self.root.after_cancel(app._poll_id))
+                self.addCleanup(self.root.after_cancel, app._poll_id)
                 app.checkpoint_var.set(str(self.checkpoint))
                 app.output_var.set(str(self.directory / "results"))
                 app.dataset_var.set(label)
@@ -552,6 +602,7 @@ class GUIFunctionChecks(unittest.TestCase):
                 app._start()
                 output = app.current_output
                 self.assertIsNotNone(output)
+                assert output is not None
                 self.assertEqual(output.parent, self.directory / "results" / key)
                 self.assertTrue(output.name.startswith("seed_42_source_only_"))
                 payload = app.process.config_payload
@@ -771,10 +822,36 @@ class GUIFunctionChecks(unittest.TestCase):
         with patch("Paradigm.tta_composition.gui.show_hyperparameter_dialog", return_value=values):
             self.app._edit_hyperparameters()
         self.assertEqual(self.app.hyperparameter_values["grata_noise_std"], 0.07)
+        self.assertEqual(load_saved_hyperparameters(self.settings_path), values)
         self.assertIn("已調整", self.app.hyperparameter_hint_var.get())
         with patch("Paradigm.tta_composition.gui.show_hyperparameter_dialog", return_value=None):
             self.app._edit_hyperparameters()
-        self.assertEqual(self.app.hyperparameter_values["grata_noise_std"], 0.07)
+        self.assertEqual(self.app.hyperparameter_values, values)
+        self.assertEqual(load_saved_hyperparameters(self.settings_path), values)
+
+    def test_applied_settings_are_loaded_by_a_new_gui(self) -> None:
+        from Paradigm.tta_composition.gui import CompositionGUI
+
+        values = default_hyperparameters()
+        values.update(image_size=128, testfit_confidence=0.91, grata_noise_std=0.17)
+        values["lrs"]["TestFit"] = 0.002
+        with patch("Paradigm.tta_composition.gui.show_hyperparameter_dialog", return_value=values):
+            self.app._edit_hyperparameters()
+        reopened = CompositionGUI(self.root)
+        self.addCleanup(lambda: self.root.after_cancel(reopened._poll_id))
+        self.assertEqual(reopened.hyperparameter_values, values)
+        self.assertIn("128 px", reopened.hyperparameter_hint_var.get())
+
+    def test_save_failure_keeps_applied_settings_and_reports_problem(self) -> None:
+        values = default_hyperparameters()
+        values["testfit_confidence"] = 0.91
+        with patch("Paradigm.tta_composition.gui.show_hyperparameter_dialog", return_value=values), \
+             patch("Paradigm.tta_composition.gui.save_hyperparameters", side_effect=PermissionError("locked")), \
+             patch("Paradigm.tta_composition.gui.messagebox.showwarning") as warning:
+            self.app._edit_hyperparameters()
+        warning.assert_called_once()
+        self.assertEqual(self.app.hyperparameter_values, values)
+        self.assertIn("無法保存超參數", self.app.log.get("1.0", "end"))
 
     def test_hyperparameter_editor_is_disabled_during_run(self) -> None:
         self.app._start()
@@ -793,6 +870,7 @@ class GUIFunctionChecks(unittest.TestCase):
         dialog.variables["lr_GraTa"].set("0.002")
         dialog.variables["adaptation_steps"].set("4")
         dialog._apply()
+        assert dialog.result is not None
         self.assertEqual(dialog.result["testfit_confidence"], 0.91)
         self.assertEqual(dialog.result["lrs"]["GraTa"], 0.002)
         self.assertEqual(dialog.result["adaptation_steps"], 4)
@@ -803,12 +881,42 @@ class GUIFunctionChecks(unittest.TestCase):
         values["testfit_confidence"] = 0.93
         dialog = HyperparameterDialog(self.root, values)
         dialog.variables["image_size"].set("128")
-        dialog._restore_defaults()
+        dialog._restore_all_defaults()
         self.assertEqual(parse_hyperparameters(dialog._read_values()), default_hyperparameters())
         self.assertIsNone(dialog.result)
         dialog._cancel()
         self.assertIsNone(dialog.result)
         self.assertEqual(values["testfit_confidence"], 0.93)
+
+    def test_testfit_tab_reset_preserves_other_method_settings(self) -> None:
+        values = default_hyperparameters()
+        values.update(image_size=128, adaptation_steps=5, testfit_confidence=0.93,
+                      testfit_feature_weight=0.2, grata_noise_std=0.17, smart_ema_decay=0.8)
+        values["lrs"] = {method: 0.002 for method in values["lrs"]}
+        dialog = HyperparameterDialog(self.root, values)
+        try:
+            dialog.notebook.select(dialog.notebook.tabs()[3])  # TestFit
+            dialog._restore_defaults()
+            defaults = default_hyperparameters()
+            expected = {**values, "lrs": {**values["lrs"], "TestFit": defaults["lrs"]["TestFit"]},
+                        "testfit_confidence": defaults["testfit_confidence"],
+                        "testfit_feature_weight": defaults["testfit_feature_weight"]}
+            self.assertEqual(parse_hyperparameters(dialog._read_values()), expected)
+        finally:
+            dialog._cancel()
+
+    def test_general_tab_reset_preserves_method_settings(self) -> None:
+        values = default_hyperparameters()
+        values.update(image_size=128, normalization="percentile", adaptation_steps=5,
+                      testfit_confidence=0.91, grata_noise_std=0.17)
+        dialog = HyperparameterDialog(self.root, values)
+        try:
+            dialog._restore_defaults()
+            defaults = default_hyperparameters()
+            expected = {**values, **{name: defaults[name] for name in ("image_size", "normalization", "adaptation_steps")}}
+            self.assertEqual(parse_hyperparameters(dialog._read_values()), expected)
+        finally:
+            dialog._cancel()
 
     def test_dialog_invalid_apply_keeps_editor_open(self) -> None:
         dialog = HyperparameterDialog(self.root, default_hyperparameters())
