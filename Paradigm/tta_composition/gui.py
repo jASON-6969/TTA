@@ -26,6 +26,9 @@ from .gui_process import RunProcess
 from .result_summary import format_result
 
 
+EXTREME_DIFFICULT_LABEL = "Extreme difficult"
+
+
 class CompositionGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -99,7 +102,8 @@ class CompositionGUI:
         ttk.Label(data_row, text="目標資料").pack(side="left", padx=(0, 14))
         dataset_box = ttk.Combobox(
             data_row, textvariable=self.dataset_var,
-            values=("Montgomery", "SZ-CXR", "JSRT", "自訂資料夾"), state="readonly", width=18,
+            values=("Montgomery", "SZ-CXR", "JSRT", EXTREME_DIFFICULT_LABEL, "自訂資料夾"),
+            state="readonly", width=18,
         )
         dataset_box.pack(side="left")
         dataset_box.bind("<<ComboboxSelected>>", self._dataset_changed)
@@ -200,12 +204,22 @@ class CompositionGUI:
             self.output_var.set(selected)
 
     def _dataset_key(self) -> str:
-        return {"Montgomery": "montgomery", "SZ-CXR": "sz_cxr", "JSRT": "jsrt", "自訂資料夾": "custom"}[self.dataset_var.get()]
+        return {
+            "Montgomery": "montgomery",
+            "SZ-CXR": "sz_cxr",
+            "JSRT": "jsrt",
+            EXTREME_DIFFICULT_LABEL: "custom",
+            "自訂資料夾": "custom",
+        }[self.dataset_var.get()]
 
     def _dataset_changed(self, _event=None) -> None:
         key = self._dataset_key()
         self.mask_dir_var.set("")
-        if key == "custom":
+        if self.dataset_var.get() == EXTREME_DIFFICULT_LABEL:
+            case_root = self.test_v1 / "gui_cases" / "extreme_difficult"
+            self.image_dir_var.set(str(case_root / "images"))
+            self.mask_dir_var.set(str(case_root / "masks"))
+        elif key == "custom":
             self.image_dir_var.set("")
         else:
             dataset_root = self.test_v1 / "data" / "raw" / key
